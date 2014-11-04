@@ -34,45 +34,136 @@ typedef struct {
 	Pos p4;
 } Square;
 
+typedef struct {
+	unsigned char *data;
+	unsigned int width;
+	unsigned int height;
+} Image;
+
+typedef struct {
+	unsigned char *data;
+	unsigned int width;
+	unsigned int height;
+} ColorImage;
+
+#define pixel(I, X, Y) ((I).data[(Y)*(I).width + (X)])
+#define pixelR(I, X, Y) ((I).data[(Y)*(I).width*3 + 3*(X)])
+#define pixelG(I, X, Y) ((I).data[(Y)*(I).width*3 + 3*(X) + 1])
+#define pixelB(I, X, Y) ((I).data[(Y)*(I).width*3 + 3*(X) + 2])
+
 int OUTPUT_WIDTH;
 int OUTPUT_HEIGHT;
 
-void save(NSData *data, NSString *path)
+void saveImage(Image image, NSString *path)
 {
+	NSBitmapImageRep *imageRep = [[NSBitmapImageRep alloc] initWithBitmapDataPlanes:nil
+																		 pixelsWide:image.width
+																		 pixelsHigh:image.height
+																	  bitsPerSample:8
+																	samplesPerPixel:3
+																		   hasAlpha:NO
+																		   isPlanar:NO
+																	 colorSpaceName:NSDeviceRGBColorSpace
+																		bytesPerRow:image.width*3
+																	   bitsPerPixel:24];
+	const NSInteger imageRowBytes = [imageRep bytesPerRow];
+	unsigned char *imagePix = [imageRep bitmapData];
+	
+	for (int y = 0; y < image.height; y++)
+	{
+		for (int x = 0; x < image.width; x++)
+		{
+			imagePix[y*imageRowBytes + 3*x] = pixel(image, x, y);
+			imagePix[y*imageRowBytes + 3*x + 1] = pixel(image, x, y);
+			imagePix[y*imageRowBytes + 3*x + 2] = pixel(image, x, y);
+		}
+	}
+
+	NSData *data = [imageRep representationUsingType:NSBMPFileType properties:nil];
 	[data writeToFile:path atomically:NO];
 }
 
-NSBitmapImageRep* convertToImageRep(NSImage *image)
+void saveColorImage(ColorImage image, NSString *path)
 {
-	NSData *tiffData = [image TIFFRepresentation];
-	NSBitmapImageRep *imageRep = [NSBitmapImageRep imageRepWithData:tiffData];
+	NSBitmapImageRep *imageRep = [[NSBitmapImageRep alloc] initWithBitmapDataPlanes:nil
+																		 pixelsWide:image.width
+																		 pixelsHigh:image.height
+																	  bitsPerSample:8
+																	samplesPerPixel:3
+																		   hasAlpha:NO
+																		   isPlanar:NO
+																	 colorSpaceName:NSDeviceRGBColorSpace
+																		bytesPerRow:image.width*3
+																	   bitsPerPixel:24];
+	const NSInteger imageRowBytes = [imageRep bytesPerRow];
+	unsigned char *imagePix = [imageRep bitmapData];
 	
-	return imageRep;
+	for (int y = 0; y < image.height; y++)
+	{
+		for (int x = 0; x < image.width; x++)
+		{
+			imagePix[y*imageRowBytes + 3*x] = pixelR(image, x, y);
+			imagePix[y*imageRowBytes + 3*x + 1] = pixelG(image, x, y);
+			imagePix[y*imageRowBytes + 3*x + 2] = pixelB(image, x, y);
+		}
+	}
+	
+	NSData *data = [imageRep representationUsingType:NSBMPFileType properties:nil];
+	[data writeToFile:path atomically:NO];
 }
 
-NSBitmapImageRep* greyscale(NSBitmapImageRep *input, const int width, const int height)
+Image initImage(unsigned int width, unsigned int height)
 {
-	NSBitmapImageRep *output = [[NSBitmapImageRep alloc] initWithBitmapDataPlanes:nil pixelsWide:width pixelsHigh:height bitsPerSample:8 samplesPerPixel:3 hasAlpha:NO isPlanar:NO colorSpaceName:NSDeviceRGBColorSpace bytesPerRow:width*3 bitsPerPixel:24];
+	Image image;
+	image.width = width;
+	image.height = height;
+	image.data = calloc(width * height, sizeof(unsigned char));
 	
-	const NSInteger inputRowBytes = [input bytesPerRow];
-	unsigned char *inputPix = [input bitmapData];
+	return image;
+}
+
+ColorImage initColorImage(unsigned int width, unsigned int height)
+{
+	ColorImage image;
+	image.width = width;
+	image.height = height;
+	image.data = calloc(width * height * 3, sizeof(unsigned char));
 	
-	const NSInteger outputRowBytes = [output bytesPerRow];
-	unsigned char *outputPix = [output bitmapData];
-	
-	int grey;
-	
-	for (int y = 1; y < height-1; y++)
+	return image;
+}
+
+void deleteImage(Image image)
+{
+	free(image.data);
+}
+
+void deleteColorImage(ColorImage image)
+{
+	free(image.data);
+}
+
+ColorImage convertToColorImage(NSImage *nsimage)
+{
+	NSData *tiffData = [nsimage TIFFRepresentation];
+	NSBitmapImageRep *imageRep = [NSBitmapImageRep imageRepWithData:tiffData];
+
+	ColorImage image;
+	image.width = (unsigned int)imageRep.pixelsWide;
+	image.height = (unsigned int)imageRep.pixelsHigh;
+	image.data = imageRep.bitmapData;
+
+	return image;
+}
+
+Image greyscale(ColorImage input)
+{
+	Image output = initImage(input.width, input.height);
+
+	for (int y = 1; y < output.height-1; y++)
 	{
-		for (int x = 1; x < width-1; x++)
+		for (int x = 1; x < output.width-1; x++)
 		{
-			grey = (inputPix[y * inputRowBytes + 3*x] * 2
-					+ inputPix[y * inputRowBytes + 3*x + 1] * 4
-					+inputPix[y * inputRowBytes + 3*x + 2]) / 7;
-			
-			outputPix[y * outputRowBytes + 3*x] = (unsigned char)grey;
-			outputPix[y * outputRowBytes + 3*x + 1] = (unsigned char)grey;
-			outputPix[y * outputRowBytes + 3*x + 2] = (unsigned char)grey;
+			pixel(output, x, y) = (pixelR(input, x, y)*2 + pixelG(input, x, y)*4 + pixelB(input, x, y)) / 7;
 		}
 	}
 	
@@ -110,45 +201,31 @@ int detectThreshold(int arr[], const int ARR_SIZE)
 	return maxSigmaIndex;
 }
 
-NSBitmapImageRep* monochrome(NSBitmapImageRep *input, const int width, const int height)
+Image monochrome(ColorImage input)
 {
-	NSBitmapImageRep *output = [[NSBitmapImageRep alloc] initWithBitmapDataPlanes:nil pixelsWide:width pixelsHigh:height bitsPerSample:8 samplesPerPixel:3 hasAlpha:NO isPlanar:NO colorSpaceName:NSDeviceRGBColorSpace bytesPerRow:width*3 bitsPerPixel:24];
-	
-	const NSInteger inputRowBytes = [input bytesPerRow];
-	unsigned char *inputPix = [input bitmapData];
-	
-	const NSInteger outputRowBytes = [output bytesPerRow];
-	unsigned char *outputPix = [output bitmapData];
+	Image output = initImage(input.width, input.height);
 	
 	int arrBrightness[64];//幅4で64段階
-	unsigned char r, g, b;
-	
 	for (int i = 0; i < 64; i++) arrBrightness[i] = 0;
 	
-	for (int y = 0; y < height; y++) {
-		for (int x = 0; x < width; x++) {
-			r = inputPix[y*inputRowBytes + 3*x];
-			g = inputPix[y*inputRowBytes + 3*x + 1];
-			b = inputPix[y*inputRowBytes + 3*x + 2];
-			arrBrightness[(r*2+g*4+b)/7/4]++;
+	for (int y = 0; y < input.height; y++) {
+		for (int x = 0; x < input.width; x++) {
+			arrBrightness[(pixelR(input, x, y)*2
+						   + pixelG(input, x, y)*4
+						   + pixelB(input, x, y))
+						  /7/4]++;
 		}
 	}
 	int threshold = detectThreshold(arrBrightness, 64);
 	
-	for (int y = 1; y < height; y++) {
-		for (int x = 1; x < width; x++) {
-			r = inputPix[y*inputRowBytes + 3*x];
-			g = inputPix[y*inputRowBytes + 3*x + 1];
-			b = inputPix[y*inputRowBytes + 3*x + 2];
-			
-			if ((r*2+g*4+b)/7 < threshold*4) {
-				outputPix[y*outputRowBytes + 3*x] = 0;
-				outputPix[y*outputRowBytes + 3*x + 1] = 0;
-				outputPix[y*outputRowBytes + 3*x + 2] = 0;
+	for (int y = 1; y < input.height; y++) {
+		for (int x = 1; x < input.width; x++) {
+			if ((pixelR(input, x, y)*2
+				 + pixelG(input, x, y)*4
+				 + pixelB(input, x, y))/7 < threshold*4) {
+				pixel(output, x, y) = 0;
 			} else {
-				outputPix[y*outputRowBytes + 3*x] = 255;
-				outputPix[y*outputRowBytes + 3*x + 1] = 255;
-				outputPix[y*outputRowBytes + 3*x + 2] = 255;
+				pixel(output, x, y) = 255;
 			}
 		}
 	}
@@ -156,16 +233,10 @@ NSBitmapImageRep* monochrome(NSBitmapImageRep *input, const int width, const int
 	return output;
 }
 
-NSBitmapImageRep* normalize(NSBitmapImageRep *input, const int width, const int height)
+ColorImage normalize(ColorImage input)
 {
-	NSBitmapImageRep *output = [[NSBitmapImageRep alloc] initWithBitmapDataPlanes:nil pixelsWide:width pixelsHigh:height bitsPerSample:8 samplesPerPixel:3 hasAlpha:NO isPlanar:NO colorSpaceName:NSDeviceRGBColorSpace bytesPerRow:width*3 bitsPerPixel:24];
+	ColorImage output = initColorImage(input.width, input.height);
 	unsigned int totalR = 0, totalG = 0, totalB = 0;
-	
-	const NSInteger inputRowBytes = [input bytesPerRow];
-	unsigned char *inputPix = [input bitmapData];
-	
-	const NSInteger outputRowBytes = [output bytesPerRow];
-	unsigned char *outputPix = [output bitmapData];
 	
 	unsigned char weight[9] = {
 		1, 2, 1,
@@ -173,9 +244,9 @@ NSBitmapImageRep* normalize(NSBitmapImageRep *input, const int width, const int 
 		1, 2, 1
 	};
 	
-	for (int y = 1; y < height-1; y++)
+	for (int y = 1; y < input.height-1; y++)
 	{
-		for (int x = 1; x < width-1; x++)
+		for (int x = 1; x < input.width-1; x++)
 		{
 			totalR = 0;
 			totalG = 0;
@@ -183,51 +254,43 @@ NSBitmapImageRep* normalize(NSBitmapImageRep *input, const int width, const int 
 			
 			for (int dy = -1; dy <= 1; dy++) {
 				for (int dx = -1; dx <= 1; dx++) {
-					totalR += inputPix[(y+dy) * inputRowBytes + 3*(x+dx)] * weight[dx+1+3*(dy+1)];
-					totalG += inputPix[(y+dy) * inputRowBytes + 3*(x+dx) + 1] * weight[dx+1+3*(dy+1)];
-					totalB += inputPix[(y+dy) * inputRowBytes + 3*(x+dx) + 2] * weight[dx+1+3*(dy+1)];
+					totalR += pixelR(input, x+dx, y+dy) * weight[(dx+1)+3*(dy+1)];
+					totalG += pixelG(input, x+dx, y+dy) * weight[(dx+1)+3*(dy+1)];
+					totalB += pixelB(input, x+dx, y+dy) * weight[(dx+1)+3*(dy+1)];
 				}
 			}
 			
-			outputPix[y * outputRowBytes + 3*x] = (unsigned char)(totalR / 16);
-			outputPix[y * outputRowBytes + 3*x + 1] = (unsigned char)(totalG / 16);
-			outputPix[y * outputRowBytes + 3*x + 2] = (unsigned char)(totalB / 16);
+			pixelR(output, x, y) = totalR/16;
+			pixelG(output, x, y) = totalG/16;
+			pixelB(output, x, y) = totalB/16;
 		}
 	}
 	
 	return output;
 }
 
-NSBitmapImageRep* findLine(NSBitmapImageRep *input, const int width, const int height)
+Image findLine(ColorImage input)
 {
-	NSBitmapImageRep *output = [[NSBitmapImageRep alloc] initWithBitmapDataPlanes:nil pixelsWide:width pixelsHigh:height bitsPerSample:8 samplesPerPixel:3 hasAlpha:NO isPlanar:NO colorSpaceName:NSDeviceRGBColorSpace bytesPerRow:width*3 bitsPerPixel:24];
-	
-	const NSUInteger inputRowBytes = [input bytesPerRow];
-	unsigned char *inputPix = [input bitmapData];
-	
-	const NSUInteger outputRowBytes = [output bytesPerRow];
-	unsigned char *outputPix = [output bitmapData];
+	Image output = initImage(input.width, input.height);
 	
 	unsigned char r = 0, g = 0, b = 0;
 	unsigned char prevR = 0, prevG = 0, prevB = 0;
 	unsigned char dif = 0, prevdif = 0;
 	
-	for (int y = 1; y < height; y++)
+	for (int y = 1; y < input.height; y++)
 	{
-		for (int x = 1; x < width; x++)
+		for (int x = 1; x < input.width; x++)
 		{
-			r =inputPix[y*inputRowBytes + 3*x];
-			g =inputPix[y*inputRowBytes + 3*x + 1];
-			b =inputPix[y*inputRowBytes + 3*x + 2];
+			r = pixelR(input, x, y);
+			g = pixelG(input, x, y);
+			b = pixelB(input, x, y);
 			
 			dif = (abs(r - prevR)
 				   + abs(g - prevG)
 				   + abs(b - prevB))/3;
 			
 			if (prevdif - dif > EPS) {
-				outputPix[y*outputRowBytes + 3*x] = 255;
-				outputPix[y*outputRowBytes + 3*x + 1] = 255;
-				outputPix[y*outputRowBytes + 3*x + 2] = 255;
+				pixel(output, x, y) = 255;
 			}
 			
 			prevR = r;
@@ -237,22 +300,20 @@ NSBitmapImageRep* findLine(NSBitmapImageRep *input, const int width, const int h
 		}
 	}
 	
-	for (int x = 1; x < width; x++)
+	for (int x = 1; x < input.width; x++)
 	{
-		for (int y = 1; y < height; y++)
+		for (int y = 1; y < input.height; y++)
 		{
-			r =inputPix[y*inputRowBytes + 3*x];
-			g =inputPix[y*inputRowBytes + 3*x + 1];
-			b =inputPix[y*inputRowBytes + 3*x + 2];
+			r = pixelR(input, x, y);
+			g = pixelG(input, x, y);
+			b = pixelB(input, x, y);
 			
 			dif = (abs(r - prevR)
 				   + abs(g - prevG)
 				   + abs(b - prevB))/3;
 			
 			if (prevdif - dif > EPS) {
-				outputPix[y*outputRowBytes + 3*x] = 255;
-				outputPix[y*outputRowBytes + 3*x + 1] = 255;
-				outputPix[y*outputRowBytes + 3*x + 2] = 255;
+				pixel(output, x, y) = 255;
 			}
 			
 			prevR = r;
@@ -265,30 +326,20 @@ NSBitmapImageRep* findLine(NSBitmapImageRep *input, const int width, const int h
 	return output;
 }
 
-NSBitmapImageRep* noizeCancel(NSBitmapImageRep *input, const int width, const int height)
+Image noizeCancel(Image input)
 {
 	const int R = 1;
-	
-	NSBitmapImageRep *output = [[NSBitmapImageRep alloc] initWithBitmapDataPlanes:nil pixelsWide:width pixelsHigh:height bitsPerSample:8 samplesPerPixel:3 hasAlpha:NO isPlanar:NO colorSpaceName:NSDeviceRGBColorSpace bytesPerRow:width*3 bitsPerPixel:24];
-	
-	const NSUInteger inputRowBytes = [input bytesPerRow];
-	unsigned char *inputPix = [input bitmapData];
-	
-	const NSUInteger outputRowBytes = [output bytesPerRow];
-	unsigned char *outputPix = [output bitmapData];
-	
+
+	Image output = initImage(input.width, input.height);
 	int cx, cy, count = 0;
 	
-	for (cx = R; cx < width - R; cx++)
+	for (cx = R; cx < input.width - R; cx++)
 	{
-		for (cy = R; cy < height - R; cy++)
+		for (cy = R; cy < input.height - R; cy++)
 		{
+			pixel(output, cx, cy) = pixel(input, cx, cy);
 			
-			outputPix[cy*outputRowBytes + 3*cx] = inputPix[cy*outputRowBytes + 3*cx];
-			outputPix[cy*outputRowBytes + 3*cx + 1] = inputPix[cy*inputRowBytes + 3*cx + 1];
-			outputPix[cy*outputRowBytes + 3*cx + 2] = inputPix[cy*inputRowBytes + 3*cx + 2];
-			
-			if (inputPix[cy*inputRowBytes + 3*cx] == 0)
+			if (pixel(input, cx, cy) == 0)
 			{
 				continue;
 			}
@@ -298,7 +349,7 @@ NSBitmapImageRep* noizeCancel(NSBitmapImageRep *input, const int width, const in
 			{
 				for (int y = cy-R; y <= cy+R; y++)
 				{
-					if (inputPix[y*inputRowBytes + 3*x] == 255)
+					if (pixel(input, cx, cy) == 255)
 					{
 						count++;
 					}
@@ -307,9 +358,7 @@ NSBitmapImageRep* noizeCancel(NSBitmapImageRep *input, const int width, const in
 			
 			if (count < 2*R+1)
 			{
-				outputPix[cy*outputRowBytes + 3*cx] = 0;
-				outputPix[cy*outputRowBytes + 3*cx + 1] = 0;
-				outputPix[cy*outputRowBytes + 3*cx + 2] = 0;
+				pixel(output, cx, cy) = 0;
 			}
 		}
 	};
@@ -317,78 +366,52 @@ NSBitmapImageRep* noizeCancel(NSBitmapImageRep *input, const int width, const in
 	return output;
 }
 
-NSBitmapImageRep* thiness(NSBitmapImageRep *input, const int width, const int height)
+Image thiness(Image input)
 {
-	NSBitmapImageRep *output = [[NSBitmapImageRep alloc] initWithBitmapDataPlanes:nil pixelsWide:width pixelsHigh:height bitsPerSample:8 samplesPerPixel:3 hasAlpha:NO isPlanar:NO colorSpaceName:NSDeviceRGBColorSpace bytesPerRow:width*3 bitsPerPixel:24];
+	Image output = initImage(input.width, input.height);
 	
-	const NSUInteger inputRowBytes = [input bytesPerRow];
-	unsigned char *inputPix = [input bitmapData];
-	
-	const NSUInteger outputRowBytes = [output bytesPerRow];
-	unsigned char *outputPix = [output bitmapData];
-	
-	unsigned char r = 0, g = 0, b = 0;
-	unsigned char prevR = 0, prevG = 0, prevB = 0;
+	unsigned char pix = 0;
+	unsigned char prev = 0;
 	unsigned char dif = 0;
 	
-	for (int y = 1; y < height; y++)
+	for (int y = 1; y < input.height; y++)
 	{
-		for (int x = 1; x < width; x++)
+		for (int x = 1; x < input.width; x++)
 		{
-			r =inputPix[y*inputRowBytes + 3*x];
-			g =inputPix[y*inputRowBytes + 3*x + 1];
-			b =inputPix[y*inputRowBytes + 3*x + 2];
-			
-			dif = (r - prevR
-				   + g - prevG
-				   + b - prevB)/3;
-			
+			pix = pixel(input, x, y);
+			dif = pix - prev;
+
 			if (dif > EPS) {
-				outputPix[y*outputRowBytes + 3*x] = 255;
-				outputPix[y*outputRowBytes + 3*x + 1] = 255;
-				outputPix[y*outputRowBytes + 3*x + 2] = 255;
+				pixel(output, x, y) = 255;
 			}
 			
-			prevR = r;
-			prevG = g;
-			prevB = b;
+			prev = pix;
 		}
 	}
 	
-	for (int x = 1; x < width; x++)
+	for (int x = 1; x < input.width; x++)
 	{
-		for (int y = 1; y < height; y++)
+		for (int y = 1; y < input.height; y++)
 		{
-			r =inputPix[y*inputRowBytes + 3*x];
-			g =inputPix[y*inputRowBytes + 3*x + 1];
-			b =inputPix[y*inputRowBytes + 3*x + 2];
-			
-			dif = (r - prevR
-				   + g - prevG
-				   + b - prevB)/3;
+			pix = pixel(input, x, y);
+			dif = pix - prev;
 			
 			if (dif > EPS) {
-				outputPix[y*outputRowBytes + 3*x] = 255;
-				outputPix[y*outputRowBytes + 3*x + 1] = 255;
-				outputPix[y*outputRowBytes + 3*x + 2] = 255;
+				pixel(output, x, y) = 255;
 			}
 			
-			prevR = r;
-			prevG = g;
-			prevB = b;
+			prev = pix;
 		}
 	}
+
 	
 	return output;
 }
 
-Line* findEdge(NSBitmapImageRep *input, const int width, const int height)
+Line* findEdge(Image input)
 {
-	const NSUInteger inputRowBytes = [input bytesPerRow];
-	unsigned char *inputPix = [input bitmapData];
-	
 	const double THETA_UNIT = M_PI / THETA_MAX;
-	const int R_MAX = sqrt(width*width + height*height);
+	const int R_MAX = sqrt(input.width*input.width + input.height*input.height);
 	const int R_MIN = 50;
 	
 	double *sn = malloc(sizeof(double) * THETA_MAX);
@@ -405,11 +428,11 @@ Line* findEdge(NSBitmapImageRep *input, const int width, const int height)
 	//走査
 	int *counter = calloc(THETA_MAX*R_MAX*2, sizeof(int));
 	int r;
-	for (int y = 0; y < height; y++)
+	for (int y = 0; y < input.height; y++)
 	{
-		for (int x = 0; x < width; x++)
+		for (int x = 0; x < input.width; x++)
 		{
-			if (inputPix[y*inputRowBytes + 3*x] != 255)
+			if (pixel(input, x, y) != 255)
 			{
 				continue;
 			}
@@ -428,7 +451,7 @@ Line* findEdge(NSBitmapImageRep *input, const int width, const int height)
 	int max = 0;
 	int hitCount = 0;
 	
-	const int REMOVE_RANGE_R = MIN(width, height) / 2;
+	const int REMOVE_RANGE_R = MIN(input.width, input.height) / 2;
 
 	while (true)
 	{
@@ -461,20 +484,20 @@ Line* findEdge(NSBitmapImageRep *input, const int width, const int height)
 		if (maxT != 0)
 		{
 			int y;
-			for (int x = 0; x < width; x++)
+			for (int x = 0; x < input.width; x++)
 			{
 				y = (maxR-cs[maxT]*x)/sn[maxT];
-				if (y < 0 || y >= height) continue;
+				if (y < 0 || y >= input.height) continue;
 			}
 		}
 		
 		if (maxT != THETA_MAX / 2)
 		{
 			int x;
-			for (int y = 0; y < height; y++)
+			for (int y = 0; y < input.height; y++)
 			{
 				x = (maxR-sn[maxT]*y)/cs[maxT];
-				if (x < 0 || x >= width) continue;
+				if (x < 0 || x >= input.width) continue;
 			}
 		}
 		
@@ -512,15 +535,9 @@ Line* findEdge(NSBitmapImageRep *input, const int width, const int height)
 	return lines;
 }
 
-NSBitmapImageRep *drawLine(Line *lines, NSBitmapImageRep *input, const int width, const int height)
+ColorImage drawLine(Line *lines, Image input)
 {
-	NSBitmapImageRep *output = [[NSBitmapImageRep alloc] initWithBitmapDataPlanes:nil pixelsWide:width pixelsHigh:height bitsPerSample:8 samplesPerPixel:3 hasAlpha:NO isPlanar:NO colorSpaceName:NSDeviceRGBColorSpace bytesPerRow:width*3 bitsPerPixel:24];
-	
-	const NSUInteger inputRowBytes = [input bytesPerRow];
-	unsigned char *inputPix = [input bitmapData];
-	
-	const NSUInteger outputRowBytes = [output bytesPerRow];
-	unsigned char *outputPix = [output bitmapData];
+	ColorImage output = initColorImage(input.width, input.height);
 	
 	const double THETA_UNIT = M_PI / THETA_MAX;
 	
@@ -535,13 +552,13 @@ NSBitmapImageRep *drawLine(Line *lines, NSBitmapImageRep *input, const int width
 	}
 	
 	//走査
-	for (int y = 0; y < height; y++)
+	for (int y = 0; y < input.height; y++)
 	{
-		for (int x = 0; x < width; x++)
+		for (int x = 0; x < input.width; x++)
 		{
-			outputPix[y*outputRowBytes + 3*x] = inputPix[y*inputRowBytes + 3*x];
-			outputPix[y*outputRowBytes + 3*x + 1] = inputPix[y*inputRowBytes + 3*x + 1];
-			outputPix[y*outputRowBytes + 3*x + 2] = inputPix[y*inputRowBytes + 3*x + 2];
+			pixelR(output, x, y) = pixel(input, x, y);
+			pixelG(output, x, y) = pixel(input, x, y);
+			pixelB(output, x, y) = pixel(input, x, y);
 		}
 	}
 	
@@ -557,22 +574,22 @@ NSBitmapImageRep *drawLine(Line *lines, NSBitmapImageRep *input, const int width
 		if (t != 0)
 		{
 			int y;
-			for (int x = 0; x < width; x++)
+			for (int x = 0; x < output.width; x++)
 			{
 				y = (r-cs[t]*x)/sn[t];
-				if (y < 0 || y >= height) continue;
-				outputPix[y*outputRowBytes + 3*x + 2] = 255;
+				if (y < 0 || y >= output.height) continue;
+				pixelB(output, x, y) = 255;
 			}
 		}
 		
 		if (t != THETA_MAX / 2)
 		{
 			int x;
-			for (int y = 0; y < height; y++)
+			for (int y = 0; y < output.height; y++)
 			{
 				x = (r-sn[t]*y)/cs[t];
-				if (x < 0 || x >= width) continue;
-				outputPix[y*outputRowBytes + 3*x + 2] = 255;
+				if (x < 0 || x >= output.width) continue;
+				pixelB(output, x, y) = 255;
 			}
 		}
 	}
@@ -583,11 +600,8 @@ NSBitmapImageRep *drawLine(Line *lines, NSBitmapImageRep *input, const int width
 	return output;
 }
 
-Line *selectEdge(Line *lines, NSBitmapImageRep *input, const int width, const int height, int countWeight)
+Line *selectEdge(Line *lines, Image input, int countWeight)
 {
-	const NSUInteger inputRowBytes = [input bytesPerRow];
-	unsigned char *inputPix = [input bitmapData];
-	
 	const double THETA_UNIT = M_PI / THETA_MAX;
 	
 	double *sn = malloc(sizeof(double) * THETA_MAX);
@@ -615,9 +629,9 @@ Line *selectEdge(Line *lines, NSBitmapImageRep *input, const int width, const in
 		r = lines[i].r;
 		t = lines[i].t;
 		
-		for (int x = 0; x < width; x++) {
-			for (int y = 0; y < height; y++) {
-				if (inputPix[y*inputRowBytes + 3*x] != 255)
+		for (int x = 0; x < input.width; x++) {
+			for (int y = 0; y < input.height; y++) {
+				if (pixel(input, x, y) != 255)
 				{
 					continue;
 				}
@@ -669,15 +683,9 @@ Line *selectEdge(Line *lines, NSBitmapImageRep *input, const int width, const in
 	return edges;
 }
 
-NSBitmapImageRep *drawEdge(Line *lines, NSBitmapImageRep *input, const int width, const int height)
+ColorImage drawEdge(Line *lines, Image input)
 {
-	NSBitmapImageRep *output = [[NSBitmapImageRep alloc] initWithBitmapDataPlanes:nil pixelsWide:width pixelsHigh:height bitsPerSample:8 samplesPerPixel:3 hasAlpha:NO isPlanar:NO colorSpaceName:NSDeviceRGBColorSpace bytesPerRow:width*3 bitsPerPixel:24];
-	
-	const NSUInteger inputRowBytes = [input bytesPerRow];
-	unsigned char *inputPix = [input bitmapData];
-	
-	const NSUInteger outputRowBytes = [output bytesPerRow];
-	unsigned char *outputPix = [output bitmapData];
+	ColorImage output = initColorImage(input.width, input.height);
 	
 	const double THETA_UNIT = M_PI / THETA_MAX;
 	
@@ -692,13 +700,13 @@ NSBitmapImageRep *drawEdge(Line *lines, NSBitmapImageRep *input, const int width
 	}
 	
 	//走査
-	for (int y = 0; y < height; y++)
+	for (int y = 0; y < input.height; y++)
 	{
-		for (int x = 0; x < width; x++)
+		for (int x = 0; x < input.width; x++)
 		{
-			outputPix[y*outputRowBytes + 3*x] = inputPix[y*inputRowBytes + 3*x];
-			outputPix[y*outputRowBytes + 3*x + 1] = inputPix[y*inputRowBytes + 3*x + 1];
-			outputPix[y*outputRowBytes + 3*x + 2] = inputPix[y*inputRowBytes + 3*x + 2];
+			pixelR(output, x, y) = pixel(input, x, y);
+			pixelG(output, x, y) = pixel(input, x, y);
+			pixelB(output, x, y) = pixel(input, x, y);
 		}
 	}
 	
@@ -714,26 +722,26 @@ NSBitmapImageRep *drawEdge(Line *lines, NSBitmapImageRep *input, const int width
 		if (t != 0)
 		{
 			int y;
-			for (int x = 0; x < width; x++)
+			for (int x = 0; x < output.width; x++)
 			{
 				y = (r-cs[t]*x)/sn[t];
-				if (y < 0 || y >= height) continue;
-				outputPix[y*outputRowBytes + 3*x] = 255;
-				outputPix[y*outputRowBytes + 3*x + 1] = 0;
-				outputPix[y*outputRowBytes + 3*x + 2] = 0;
+				if (y < 0 || y >= output.height) continue;
+				pixelR(output, x, y) = 255;
+				pixelG(output, x, y) = 0;
+				pixelB(output, x, y) = 0;
 			}
 		}
 		
 		if (t != THETA_MAX / 2)
 		{
 			int x;
-			for (int y = 0; y < height; y++)
+			for (int y = 0; y < output.height; y++)
 			{
 				x = (r-sn[t]*y)/cs[t];
-				if (x < 0 || x >= width) continue;
-				outputPix[y*outputRowBytes + 3*x] = 255;
-				outputPix[y*outputRowBytes + 3*x + 1] = 0;
-				outputPix[y*outputRowBytes + 3*x + 2] = 0;
+				if (x < 0 || x >= output.width) continue;
+				pixelR(output, x, y) = 255;
+				pixelG(output, x, y) = 0;
+				pixelB(output, x, y) = 0;
 			}
 		}
 	}
@@ -744,8 +752,10 @@ NSBitmapImageRep *drawEdge(Line *lines, NSBitmapImageRep *input, const int width
 	return output;
 }
 
-Square findSquare(Line *edges, const int width, const int height)
+Square findSquare(Line *edges, Image input)
 {
+	const int width = input.width;
+	const int height = input.height;
 	const double THETA_UNIT = M_PI / THETA_MAX;
 	
 	double *sn = malloc(sizeof(double) * THETA_MAX);
@@ -849,51 +859,52 @@ Square findSquare(Line *edges, const int width, const int height)
 	return square;
 }
 
-NSBitmapImageRep *drawSquare(Square square, NSBitmapImageRep *input, const int width, const int height)
+ColorImage drawSquare(Square square, Image input)
 {
-	NSBitmapImageRep *output = [[NSBitmapImageRep alloc] initWithBitmapDataPlanes:nil pixelsWide:width pixelsHigh:height bitsPerSample:8 samplesPerPixel:3 hasAlpha:NO isPlanar:NO colorSpaceName:NSDeviceRGBColorSpace bytesPerRow:width*3 bitsPerPixel:24];
-	
-	unsigned char *inputPix = [input bitmapData];
-	
-	const NSUInteger outputRowBytes = [output bytesPerRow];
-	unsigned char *outputPix = [output bitmapData];
+	ColorImage output = initColorImage(input.width, input.height);
 	
 	Pos p1 = square.p1;
 	Pos p2 = square.p2;
 	Pos p3 = square.p3;
 	Pos p4 = square.p4;
 	
-	for (int i = 0; i < width*height*3; i++)
+	//走査
+	for (int y = 0; y < input.height; y++)
 	{
-		outputPix[i] = inputPix[i];
+		for (int x = 0; x < input.width; x++)
+		{
+			pixelR(output, x, y) = pixel(input, x, y);
+			pixelG(output, x, y) = pixel(input, x, y);
+			pixelB(output, x, y) = pixel(input, x, y);
+		}
 	}
 	
 	for (int dx = -10; dx <= 10; dx++)
 	{
 		for (int dy = -10; dy <= 10; dy++)
 		{
-			if (p1.x+dx > 0 && p1.x+dx < width && p1.y+dy > 0 && p1.y+dy < height) {
-				outputPix[(p1.y+dy)*outputRowBytes + 3*(p1.x+dx)] = 0;
-				outputPix[(p1.y+dy)*outputRowBytes + 3*(p1.x+dx) + 1] = 255;
-				outputPix[(p1.y+dy)*outputRowBytes + 3*(p1.x+dx) + 2] = 0;
+			if (p1.x+dx > 0 && p1.x+dx < input.width && p1.y+dy > 0 && p1.y+dy < input.height) {
+				pixelR(output, p1.x+dx, p1.y+dy) = 0;
+				pixelG(output, p1.x+dx, p1.y+dy) = 255;
+				pixelB(output, p1.x+dx, p1.y+dy) = 0;
 			}
 			
-			if (p2.x+dx > 0 && p2.x+dx < width && p2.y+dy > 0 && p2.y+dy < height) {
-				outputPix[(p2.y+dy)*outputRowBytes + 3*(p2.x+dx)] = 255;
-				outputPix[(p2.y+dy)*outputRowBytes + 3*(p2.x+dx) + 1] = 0;
-				outputPix[(p2.y+dy)*outputRowBytes + 3*(p2.x+dx) + 2] = 255;
+			if (p2.x+dx > 0 && p2.x+dx < input.width && p2.y+dy > 0 && p2.y+dy < input.height) {
+				pixelR(output, p2.x+dx, p2.y+dy) = 255;
+				pixelG(output, p2.x+dx, p2.y+dy) = 0;
+				pixelB(output, p2.x+dx, p2.y+dy) = 255;
 			}
 			
-			if (p3.x+dx > 0 && p3.x+dx < width && p3.y+dy > 0 && p3.y+dy < height) {
-				outputPix[(p3.y+dy)*outputRowBytes + 3*(p3.x+dx)] = 255;
-				outputPix[(p3.y+dy)*outputRowBytes + 3*(p3.x+dx) + 1] = 128;
-				outputPix[(p3.y+dy)*outputRowBytes + 3*(p3.x+dx) + 2] = 0;
+			if (p3.x+dx > 0 && p3.x+dx < input.width && p3.y+dy > 0 && p3.y+dy < input.height) {
+				pixelR(output, p3.x+dx, p3.y+dy) = 255;
+				pixelG(output, p3.x+dx, p3.y+dy) = 128;
+				pixelB(output, p3.x+dx, p3.y+dy) = 0;
 			}
 			
-			if (p4.x+dx > 0 && p4.x+dx < width && p4.y+dy > 0 && p4.y+dy < height) {
-				outputPix[(p4.y+dy)*outputRowBytes + 3*(p4.x+dx)] = 0;
-				outputPix[(p4.y+dy)*outputRowBytes + 3*(p4.x+dx) + 1] = 255;
-				outputPix[(p4.y+dy)*outputRowBytes + 3*(p4.x+dx) + 2] = 255;
+			if (p4.x+dx > 0 && p4.x+dx < input.width && p4.y+dy > 0 && p4.y+dy < input.height) {
+				pixelR(output, p4.x+dx, p4.y+dy) = 0;
+				pixelG(output, p4.x+dx, p4.y+dy) = 255;
+				pixelB(output, p4.x+dx, p4.y+dy) = 255;
 			}
 			
 		}
@@ -902,28 +913,13 @@ NSBitmapImageRep *drawSquare(Square square, NSBitmapImageRep *input, const int w
 	return output;
 }
 
-NSBitmapImageRep *clipping(Square square, NSBitmapImageRep *input, const int width, const int height)
+ColorImage clipping(Square square, ColorImage input)
 {
 	OUTPUT_WIDTH = sqrt(pow(square.p1.x-square.p2.x, 2) + pow(square.p1.y-square.p2.y, 2));
 	OUTPUT_HEIGHT = sqrt(pow(square.p1.x-square.p4.x, 2) + pow(square.p1.y-square.p4.y, 2));
 	
-	NSBitmapImageRep *output = [[NSBitmapImageRep alloc] initWithBitmapDataPlanes:nil
-																	   pixelsWide:OUTPUT_WIDTH
-																	   pixelsHigh:OUTPUT_HEIGHT
-																	bitsPerSample:8
-																  samplesPerPixel:3
-																		 hasAlpha:NO
-																		 isPlanar:NO
-																   colorSpaceName:NSDeviceRGBColorSpace
-																	  bytesPerRow:OUTPUT_WIDTH*3
-																	 bitsPerPixel:24];
-	
-	const NSUInteger outputRowBytes = [output bytesPerRow];
-	unsigned char *outputPix = [output bitmapData];
-	
-	const NSUInteger inputRowBytes = [input bytesPerRow];
-	unsigned char *inputPix = [input bitmapData];
-	
+	ColorImage output = initColorImage(OUTPUT_WIDTH, OUTPUT_HEIGHT);
+
 	const double sn = 1.0 * (square.p2.y-square.p1.y) / OUTPUT_WIDTH;
 	const double cs = 1.0 * (square.p2.x-square.p1.x) / OUTPUT_WIDTH;
 	const int mx = square.p1.x;
@@ -937,17 +933,17 @@ NSBitmapImageRep *clipping(Square square, NSBitmapImageRep *input, const int wid
 			x =  cs*x2 - sn*y2 + mx;
 			y =  sn*x2 + cs*y2 + my;
 			
-			if (x < 0 || x >= width || y < 0 || y >= height)
+			if (x < 0 || x >= input.width || y < 0 || y >= input.height)
 			{
-				outputPix[y2*outputRowBytes + 3*x2] = 0;
-				outputPix[y2*outputRowBytes + 3*x2 + 1] = 0;
-				outputPix[y2*outputRowBytes + 3*x2 + 2] = 0;
+				pixelR(output, x2, y2) = 0;
+				pixelG(output, x2, y2) = 0;
+				pixelB(output, x2, y2) = 0;
 			}
 			else
 			{
-				outputPix[y2*outputRowBytes + 3*x2] = inputPix[y*inputRowBytes + 3*x];
-				outputPix[y2*outputRowBytes + 3*x2 + 1] = inputPix[y*inputRowBytes + 3*x + 1];
-				outputPix[y2*outputRowBytes + 3*x2 + 2] = inputPix[y*inputRowBytes + 3*x + 2];
+				pixelR(output, x2, y2) = pixelR(input, x, y);
+				pixelG(output, x2, y2) = pixelG(input, x, y);
+				pixelB(output, x2, y2) = pixelB(input, x, y);
 			}
 		}
 	}
@@ -958,7 +954,6 @@ NSBitmapImageRep *clipping(Square square, NSBitmapImageRep *input, const int wid
 int main(void)
 {
 	NSOpenPanel *openPanel = [NSOpenPanel openPanel];
-	NSData *output;
 	openPanel.allowedFileTypes = @[@"png", @"jpg", @"jpeg"];
 	
 	if ([openPanel runModal] != NSOKButton)
@@ -970,37 +965,38 @@ int main(void)
 	NSImage *inputImage = [[NSImage alloc] initWithContentsOfURL:openPanel.URL];
 	
 	//1. ファイルをimageRepデータに変換
-	NSBitmapImageRep *imageRep = convertToImageRep(inputImage);
-	const int width = (int)imageRep.pixelsWide;
-	const int height = (int)imageRep.pixelsHigh;
+	ColorImage image1 = convertToColorImage(inputImage);
+	saveColorImage(image1, [openPanel.URL.path stringByAppendingString:@"_out1.bmp"]);
 	
 	//2. 平滑化
-	imageRep = normalize(imageRep, width, height);
+	ColorImage image2 = normalize(image1);
+	saveColorImage(image2, [openPanel.URL.path stringByAppendingString:@"_out2.bmp"]);
 	
 	//3. 境界線検出
-	imageRep = findLine(imageRep, width, height);
-	output = [imageRep representationUsingType:NSBMPFileType properties:nil];
-	save(output, [openPanel.URL.path stringByAppendingString:@"_out3.bmp"]);
+	Image image3 = findLine(image2);
+	deleteColorImage(image2);
+	saveImage(image3, [openPanel.URL.path stringByAppendingString:@"_out3.bmp"]);
 	
 	//4. 細線化
-	imageRep = thiness(imageRep, width, height);
-	output = [imageRep representationUsingType:NSBMPFileType properties:nil];
-	save(output, [openPanel.URL.path stringByAppendingString:@"_out4.bmp"]);
+	Image image4 = thiness(image3);
+	deleteImage(image3);
+	saveImage(image4, [openPanel.URL.path stringByAppendingString:@"_out4.bmp"]);
 	
 	//5. ノイズキャンセル
-	imageRep = noizeCancel(imageRep, width, height);
-	output = [imageRep representationUsingType:NSBMPFileType properties:nil];
-	save(output, [openPanel.URL.path stringByAppendingString:@"_out5.bmp"]);
+	Image image5 = noizeCancel(image4);
+	deleteImage(image4);
+	saveImage(image5, [openPanel.URL.path stringByAppendingString:@"_out5.bmp"]);
 	
 	//6. 輪郭検出
-	Line *lines = findEdge(imageRep, width, height);
-	imageRep = drawLine(lines, imageRep, width, height);
-	output = [imageRep representationUsingType:NSBMPFileType properties:nil];
-	save(output, [openPanel.URL.path stringByAppendingString:@"_out6.bmp"]);
-
+	Line *lines = findEdge(image5);
+	ColorImage image6 = drawLine(lines, image5);
+	saveColorImage(image6, [openPanel.URL.path stringByAppendingString:@"_out6.bmp"]);
+	deleteColorImage(image6);
+	
 	int countWeight = 3;
 	Line *edges;
 	Square square;
+	ColorImage image7;
 	while (true)
 	{
 		if (countWeight == 0)
@@ -1009,35 +1005,32 @@ int main(void)
 		}
 		
 		//7. 領域選択
-		edges = selectEdge(lines, imageRep, width, height, countWeight);
-		imageRep = drawEdge(edges, imageRep, width, height);
-		output = [imageRep representationUsingType:NSBMPFileType properties:nil];
-		save(output, [openPanel.URL.path stringByAppendingString:@"_out7.bmp"]);
+		edges = selectEdge(lines, image5, countWeight);
+		image7 = drawEdge(edges, image5);
+		saveColorImage(image7, [openPanel.URL.path stringByAppendingString:@"_out7.bmp"]);
+		deleteColorImage(image7);
 		
 		//8. 頂点検出
-		square = findSquare(edges, width, height);
+		square = findSquare(edges, image5);
 		
-		if (square.p1.x != -1)
-		{
-			break;
-		}
+		if (square.p1.x != -1) break;
 		countWeight--;
 	}
-	imageRep = drawSquare(square, imageRep, width, height);
-	output = [imageRep representationUsingType:NSBMPFileType properties:nil];
-	save(output, [openPanel.URL.path stringByAppendingString:@"_out8.bmp"]);
+	ColorImage image8 = drawSquare(square, image5);
+	saveColorImage(image7, [openPanel.URL.path stringByAppendingString:@"_out8.bmp"]);
+	deleteImage(image5);
+	deleteColorImage(image8);
 	
 	//9. 変形
-	imageRep = clipping(square, convertToImageRep(inputImage), width, height);
-	output = [imageRep representationUsingType:NSBMPFileType properties:nil];
-	save(output, [openPanel.URL.path stringByAppendingString:@"_out9.bmp"]);
-	
+	ColorImage image9 = clipping(square, image1);
+	saveColorImage(image9, [openPanel.URL.path stringByAppendingString:@"_out9.bmp"]);
+//	
 	//10. フィルタかけまくる
-	imageRep = monochrome(imageRep, OUTPUT_WIDTH, OUTPUT_HEIGHT);
-	imageRep = normalize(imageRep, OUTPUT_WIDTH, OUTPUT_HEIGHT);
-	//	imageRep = thiness(imageRep, OUTPUT_WIDTH, OUTPUT_HEIGHT);
-	output = [imageRep representationUsingType:NSBMPFileType properties:nil];
-	save(output, [openPanel.URL.path stringByAppendingString:@"_out10.bmp"]);
+//	Image image10 = monochrome(image9);
+//	ColorImage image11 = normalize(image10);
+//	saveColorImage(image11, [openPanel.URL.path stringByAppendingString:@"_out10.bmp"]);
+//	deleteImage(image10);
+//	deleteColorImage(image11);
 	
 	return 0;
 }
