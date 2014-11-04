@@ -1,10 +1,10 @@
-	//
-	//  main.cpp
-	//  pdfbinder
-	//
-	//  Created by KikuraYuichiro on 2014/11/03.
-	//  Copyright (c) 2014年 KikuraYuichiro. All rights reserved.
-	//
+//
+//  main.cpp
+//  pdfbinder
+//
+//  Created by KikuraYuichiro on 2014/11/03.
+//  Copyright (c) 2014年 KikuraYuichiro. All rights reserved.
+//
 
 #include <Cocoa/Cocoa.h>
 #include <math.h>
@@ -13,7 +13,7 @@
 #define EPS 4
 #define THETA_MAX 2048
 #undef LINE_MAX
-#define LINE_MAX 30
+#define LINE_MAX 8
 #define EDGE_MAX 4
 
 typedef struct {
@@ -81,12 +81,12 @@ NSBitmapImageRep* greyscale(NSBitmapImageRep *input, const int width, const int 
 
 int detectThreshold(int arr[], const int ARR_SIZE)
 {
-		//大津のアルゴリズム
+	//大津のアルゴリズム
 	float maxSigma = 0, maxSigmaIndex = 0;
 	float sigma;
 	int n1 = 0, n2 = 0, s1 = 0, s2 = 0;
 	
-		//n:画素数 s:画素値の合計
+	//n:画素数 s:画素値の合計
 	
 	for (int i = 0; i < ARR_SIZE; i++) {
 		n2 += arr[i];
@@ -119,10 +119,10 @@ NSBitmapImageRep* monochrome(NSBitmapImageRep *input, const int width, const int
 	
 	const NSInteger outputRowBytes = [output bytesPerRow];
 	unsigned char *outputPix = [output bitmapData];
-
+	
 	int arrBrightness[64];//幅4で64段階
 	unsigned char r, g, b;
-
+	
 	for (int i = 0; i < 64; i++) arrBrightness[i] = 0;
 	
 	for (int y = 0; y < height; y++) {
@@ -287,12 +287,12 @@ NSBitmapImageRep* noizeCancel(NSBitmapImageRep *input, const int width, const in
 			outputPix[cy*outputRowBytes + 3*cx] = inputPix[cy*outputRowBytes + 3*cx];
 			outputPix[cy*outputRowBytes + 3*cx + 1] = inputPix[cy*inputRowBytes + 3*cx + 1];
 			outputPix[cy*outputRowBytes + 3*cx + 2] = inputPix[cy*inputRowBytes + 3*cx + 2];
-
+			
 			if (inputPix[cy*inputRowBytes + 3*cx] == 0)
 			{
 				continue;
 			}
-
+			
 			count = 0;
 			for (int x = cx-R; x <= cx+R; x++)
 			{
@@ -395,14 +395,14 @@ Line* findEdge(NSBitmapImageRep *input, const int width, const int height)
 	double *cs = malloc(sizeof(double) * THETA_MAX);
 	Line *lines = malloc(sizeof(Line) * LINE_MAX);
 	
-		//テーブルの用意
+	//テーブルの用意
 	for (int t = 0; t < THETA_MAX; t++)
 	{
 		sn[t] = sin(THETA_UNIT * t);
 		cs[t] = cos(THETA_UNIT * t);
 	}
 	
-		//走査
+	//走査
 	int *counter = calloc(THETA_MAX*R_MAX*2, sizeof(int));
 	int r;
 	for (int y = 0; y < height; y++)
@@ -422,12 +422,14 @@ Line* findEdge(NSBitmapImageRep *input, const int width, const int height)
 		}
 	}
 	
-		//集計
+	//集計
 	int maxT = 0;
 	int maxR = 0;
 	int max = 0;
 	int hitCount = 0;
 	
+	const int REMOVE_RANGE_R = MIN(width, height) / 2;
+
 	while (true)
 	{
 		max = 0;
@@ -455,7 +457,7 @@ Line* findEdge(NSBitmapImageRep *input, const int width, const int height)
 		lines[hitCount].r = maxR;
 		hitCount++;
 		
-			//直線を引く
+		//直線を引く
 		if (maxT != 0)
 		{
 			int y;
@@ -465,7 +467,7 @@ Line* findEdge(NSBitmapImageRep *input, const int width, const int height)
 				if (y < 0 || y >= height) continue;
 			}
 		}
-
+		
 		if (maxT != THETA_MAX / 2)
 		{
 			int x;
@@ -476,14 +478,29 @@ Line* findEdge(NSBitmapImageRep *input, const int width, const int height)
 			}
 		}
 		
-			//近傍の直線を消す
-		for (int dr = -200; dr <= 200; dr++)
+		//近傍の直線を消す
+		int offsetT, reverseR;
+		for (int dr = -REMOVE_RANGE_R; dr <= REMOVE_RANGE_R; dr++)
 		{
-			for (int dt = -50; dt <= 50; dt++)
+			for (int dt = -100; dt <= 100; dt++)
 			{
-				if (maxT+dt < 0 || maxT+dt >= THETA_MAX) continue;
+				if (maxT+dt < 0)
+				{
+					offsetT = THETA_MAX;
+					reverseR = -1;
+				}
+				else if (maxT+dt >= THETA_MAX)
+				{
+					offsetT = -THETA_MAX;
+					reverseR = -1;
+				}
+				else
+				{
+					offsetT = 0;
+					reverseR = 1;
+				}
 				if (maxR+dr < -R_MAX || maxR+dr >= R_MAX) continue;
-				counter[(maxT+dt)*R_MAX*2 + (maxR+dr)+R_MAX] = 0;
+				counter[(maxT+dt+offsetT)*R_MAX*2 + reverseR*(maxR+dr)+R_MAX] = 0;
 			}
 		}
 	}
@@ -495,23 +512,94 @@ Line* findEdge(NSBitmapImageRep *input, const int width, const int height)
 	return lines;
 }
 
-Line *selectEdge(Line *lines, NSBitmapImageRep *input, const int width, const int height)
+NSBitmapImageRep *drawLine(Line *lines, NSBitmapImageRep *input, const int width, const int height)
 {
+	NSBitmapImageRep *output = [[NSBitmapImageRep alloc] initWithBitmapDataPlanes:nil pixelsWide:width pixelsHigh:height bitsPerSample:8 samplesPerPixel:3 hasAlpha:NO isPlanar:NO colorSpaceName:NSDeviceRGBColorSpace bytesPerRow:width*3 bitsPerPixel:24];
+	
 	const NSUInteger inputRowBytes = [input bytesPerRow];
 	unsigned char *inputPix = [input bitmapData];
-
+	
+	const NSUInteger outputRowBytes = [output bytesPerRow];
+	unsigned char *outputPix = [output bitmapData];
+	
 	const double THETA_UNIT = M_PI / THETA_MAX;
 	
 	double *sn = malloc(sizeof(double) * THETA_MAX);
 	double *cs = malloc(sizeof(double) * THETA_MAX);
 	
-		//テーブルの用意
+	//テーブルの用意
 	for (int t = 0; t < THETA_MAX; t++)
 	{
 		sn[t] = sin(THETA_UNIT * t);
 		cs[t] = cos(THETA_UNIT * t);
 	}
+	
+	//走査
+	for (int y = 0; y < height; y++)
+	{
+		for (int x = 0; x < width; x++)
+		{
+			outputPix[y*outputRowBytes + 3*x] = inputPix[y*inputRowBytes + 3*x];
+			outputPix[y*outputRowBytes + 3*x + 1] = inputPix[y*inputRowBytes + 3*x + 1];
+			outputPix[y*outputRowBytes + 3*x + 2] = inputPix[y*inputRowBytes + 3*x + 2];
+		}
+	}
+	
+	Line line;
+	int t;
+	int r;
+	for (int i = 0; i < LINE_MAX; i++)
+	{
+		line = lines[i];
+		t = line.t;
+		r = line.r;
+		
+		if (t != 0)
+		{
+			int y;
+			for (int x = 0; x < width; x++)
+			{
+				y = (r-cs[t]*x)/sn[t];
+				if (y < 0 || y >= height) continue;
+				outputPix[y*outputRowBytes + 3*x + 2] = 255;
+			}
+		}
+		
+		if (t != THETA_MAX / 2)
+		{
+			int x;
+			for (int y = 0; y < height; y++)
+			{
+				x = (r-sn[t]*y)/cs[t];
+				if (x < 0 || x >= width) continue;
+				outputPix[y*outputRowBytes + 3*x + 2] = 255;
+			}
+		}
+	}
+	
+	free(sn);
+	free(cs);
+	
+	return output;
+}
 
+Line *selectEdge(Line *lines, NSBitmapImageRep *input, const int width, const int height, int countWeight)
+{
+	const NSUInteger inputRowBytes = [input bytesPerRow];
+	unsigned char *inputPix = [input bitmapData];
+	
+	const double THETA_UNIT = M_PI / THETA_MAX;
+	
+	double *sn = malloc(sizeof(double) * THETA_MAX);
+	double *cs = malloc(sizeof(double) * THETA_MAX);
+	
+	//テーブルの用意
+	for (int t = 0; t < THETA_MAX; t++)
+	{
+		sn[t] = sin(THETA_UNIT * t);
+		cs[t] = cos(THETA_UNIT * t);
+	}
+	
 	Line *edges = malloc(sizeof(Line) * EDGE_MAX);
 	
 	unsigned int sum, squareSum, count;
@@ -533,7 +621,7 @@ Line *selectEdge(Line *lines, NSBitmapImageRep *input, const int width, const in
 				{
 					continue;
 				}
-
+				
 				if ((int)(cs[t]*x + sn[t]*y) == r)
 				{
 					if (px == -1)
@@ -552,9 +640,9 @@ Line *selectEdge(Line *lines, NSBitmapImageRep *input, const int width, const in
 				}
 			}
 		}
-		lines[i].v = (squareSum/count - pow(sum/count, 2))/count/count;
+		lines[i].v = (int)((squareSum/count - pow(sum/count, 2))/pow(count, countWeight));
 	}
-
+	
 	int minV, minJ;
 	for (int i = 0; i < EDGE_MAX; i++)
 	{
@@ -574,7 +662,7 @@ Line *selectEdge(Line *lines, NSBitmapImageRep *input, const int width, const in
 		edges[i].v = lines[minJ].v;
 		lines[minJ].v = 99999;
 	}
-
+	
 	free(sn);
 	free(cs);
 	
@@ -596,14 +684,14 @@ NSBitmapImageRep *drawEdge(Line *lines, NSBitmapImageRep *input, const int width
 	double *sn = malloc(sizeof(double) * THETA_MAX);
 	double *cs = malloc(sizeof(double) * THETA_MAX);
 	
-		//テーブルの用意
+	//テーブルの用意
 	for (int t = 0; t < THETA_MAX; t++)
 	{
 		sn[t] = sin(THETA_UNIT * t);
 		cs[t] = cos(THETA_UNIT * t);
 	}
 	
-		//走査
+	//走査
 	for (int y = 0; y < height; y++)
 	{
 		for (int x = 0; x < width; x++)
@@ -622,7 +710,7 @@ NSBitmapImageRep *drawEdge(Line *lines, NSBitmapImageRep *input, const int width
 		edge = lines[i];
 		t = edge.t;
 		r = edge.r;
-
+		
 		if (t != 0)
 		{
 			int y;
@@ -631,6 +719,8 @@ NSBitmapImageRep *drawEdge(Line *lines, NSBitmapImageRep *input, const int width
 				y = (r-cs[t]*x)/sn[t];
 				if (y < 0 || y >= height) continue;
 				outputPix[y*outputRowBytes + 3*x] = 255;
+				outputPix[y*outputRowBytes + 3*x + 1] = 0;
+				outputPix[y*outputRowBytes + 3*x + 2] = 0;
 			}
 		}
 		
@@ -642,6 +732,8 @@ NSBitmapImageRep *drawEdge(Line *lines, NSBitmapImageRep *input, const int width
 				x = (r-sn[t]*y)/cs[t];
 				if (x < 0 || x >= width) continue;
 				outputPix[y*outputRowBytes + 3*x] = 255;
+				outputPix[y*outputRowBytes + 3*x + 1] = 0;
+				outputPix[y*outputRowBytes + 3*x + 2] = 0;
 			}
 		}
 	}
@@ -659,7 +751,7 @@ Square findSquare(Line *edges, const int width, const int height)
 	double *sn = malloc(sizeof(double) * THETA_MAX);
 	double *cs = malloc(sizeof(double) * THETA_MAX);
 	
-		//テーブルの用意
+	//テーブルの用意
 	for (int t = 0; t < THETA_MAX; t++)
 	{
 		sn[t] = sin(THETA_UNIT * t);
@@ -691,28 +783,28 @@ Square findSquare(Line *edges, const int width, const int height)
 			
 			if (count >= 4)
 			{
-				printf("pattern recognision error.");
-				return (Square){(Pos){-1, -1}};
+				printf("pattern recognision error.\n");
+				return (Square){-1, -1, -1, -1, -1, -1, -1, -1};
 			}
 			
 			corners[count] = (Pos){x, y};
 			count++;
 		}
 	}
-
+	
 	free(sn);
 	free(cs);
 	
 	if (count != 4)
 	{
-		printf("pattern recognision error.");
-		return (Square){(Pos){-1, -1}};
+		printf("pattern recognision error.\n");
+		return (Square){-1, -1, -1, -1, -1, -1, -1, -1};
 	}
-
-		//p1: 原点からもっとも近い点
-		//p2: p1よりx軸方向のの距離が大きい点
-		//p3: 原点からもっとも遠い点
-		//p4: p1よりx軸方向の距離が小さい点
+	
+	//p1: 原点からもっとも近い点
+	//p2: p1よりx軸方向のの距離が大きい点
+	//p3: 原点からもっとも遠い点
+	//p4: p1よりx軸方向の距離が小さい点
 	Square square;
 	int l, maxL, maxI, minL, minI;
 	maxL = 0;
@@ -727,7 +819,7 @@ Square findSquare(Line *edges, const int width, const int height)
 			maxL = l;
 			maxI = i;
 		}
-
+		
 		if (l < minL)
 		{
 			minL = l;
@@ -737,8 +829,8 @@ Square findSquare(Line *edges, const int width, const int height)
 	
 	square.p1 = corners[minI];
 	square.p3 = corners[maxI];
-
-	square.p2.x = width;
+	
+	square.p4.x = width;
 	for (int i = 0; i < 4; i++)
 	{
 		if (i == maxI || i == minI) continue;
@@ -757,11 +849,64 @@ Square findSquare(Line *edges, const int width, const int height)
 	return square;
 }
 
+NSBitmapImageRep *drawSquare(Square square, NSBitmapImageRep *input, const int width, const int height)
+{
+	NSBitmapImageRep *output = [[NSBitmapImageRep alloc] initWithBitmapDataPlanes:nil pixelsWide:width pixelsHigh:height bitsPerSample:8 samplesPerPixel:3 hasAlpha:NO isPlanar:NO colorSpaceName:NSDeviceRGBColorSpace bytesPerRow:width*3 bitsPerPixel:24];
+	
+	unsigned char *inputPix = [input bitmapData];
+	
+	const NSUInteger outputRowBytes = [output bytesPerRow];
+	unsigned char *outputPix = [output bitmapData];
+	
+	Pos p1 = square.p1;
+	Pos p2 = square.p2;
+	Pos p3 = square.p3;
+	Pos p4 = square.p4;
+	
+	for (int i = 0; i < width*height*3; i++)
+	{
+		outputPix[i] = inputPix[i];
+	}
+	
+	for (int dx = -10; dx <= 10; dx++)
+	{
+		for (int dy = -10; dy <= 10; dy++)
+		{
+			if (p1.x+dx > 0 && p1.x+dx < width && p1.y+dy > 0 && p1.y+dy < height) {
+				outputPix[(p1.y+dy)*outputRowBytes + 3*(p1.x+dx)] = 0;
+				outputPix[(p1.y+dy)*outputRowBytes + 3*(p1.x+dx) + 1] = 255;
+				outputPix[(p1.y+dy)*outputRowBytes + 3*(p1.x+dx) + 2] = 0;
+			}
+			
+			if (p2.x+dx > 0 && p2.x+dx < width && p2.y+dy > 0 && p2.y+dy < height) {
+				outputPix[(p2.y+dy)*outputRowBytes + 3*(p2.x+dx)] = 255;
+				outputPix[(p2.y+dy)*outputRowBytes + 3*(p2.x+dx) + 1] = 0;
+				outputPix[(p2.y+dy)*outputRowBytes + 3*(p2.x+dx) + 2] = 255;
+			}
+			
+			if (p3.x+dx > 0 && p3.x+dx < width && p3.y+dy > 0 && p3.y+dy < height) {
+				outputPix[(p3.y+dy)*outputRowBytes + 3*(p3.x+dx)] = 255;
+				outputPix[(p3.y+dy)*outputRowBytes + 3*(p3.x+dx) + 1] = 128;
+				outputPix[(p3.y+dy)*outputRowBytes + 3*(p3.x+dx) + 2] = 0;
+			}
+			
+			if (p4.x+dx > 0 && p4.x+dx < width && p4.y+dy > 0 && p4.y+dy < height) {
+				outputPix[(p4.y+dy)*outputRowBytes + 3*(p4.x+dx)] = 0;
+				outputPix[(p4.y+dy)*outputRowBytes + 3*(p4.x+dx) + 1] = 255;
+				outputPix[(p4.y+dy)*outputRowBytes + 3*(p4.x+dx) + 2] = 255;
+			}
+			
+		}
+	}
+	
+	return output;
+}
+
 NSBitmapImageRep *clipping(Square square, NSBitmapImageRep *input, const int width, const int height)
 {
 	OUTPUT_WIDTH = sqrt(pow(square.p1.x-square.p2.x, 2) + pow(square.p1.y-square.p2.y, 2));
 	OUTPUT_HEIGHT = sqrt(pow(square.p1.x-square.p4.x, 2) + pow(square.p1.y-square.p4.y, 2));
-
+	
 	NSBitmapImageRep *output = [[NSBitmapImageRep alloc] initWithBitmapDataPlanes:nil
 																	   pixelsWide:OUTPUT_WIDTH
 																	   pixelsHigh:OUTPUT_HEIGHT
@@ -773,12 +918,12 @@ NSBitmapImageRep *clipping(Square square, NSBitmapImageRep *input, const int wid
 																	  bytesPerRow:OUTPUT_WIDTH*3
 																	 bitsPerPixel:24];
 	
+	const NSUInteger outputRowBytes = [output bytesPerRow];
+	unsigned char *outputPix = [output bitmapData];
+	
 	const NSUInteger inputRowBytes = [input bytesPerRow];
 	unsigned char *inputPix = [input bitmapData];
 	
-	const NSUInteger outputRowBytes = [output bytesPerRow];
-	unsigned char *outputPix = [output bitmapData];
-
 	const double sn = 1.0 * (square.p2.y-square.p1.y) / OUTPUT_WIDTH;
 	const double cs = 1.0 * (square.p2.x-square.p1.x) / OUTPUT_WIDTH;
 	const int mx = square.p1.x;
@@ -791,7 +936,7 @@ NSBitmapImageRep *clipping(Square square, NSBitmapImageRep *input, const int wid
 		{
 			x =  cs*x2 - sn*y2 + mx;
 			y =  sn*x2 + cs*y2 + my;
-
+			
 			if (x < 0 || x >= width || y < 0 || y >= height)
 			{
 				outputPix[y2*outputRowBytes + 3*x2] = 0;
@@ -801,9 +946,7 @@ NSBitmapImageRep *clipping(Square square, NSBitmapImageRep *input, const int wid
 			else
 			{
 				outputPix[y2*outputRowBytes + 3*x2] = inputPix[y*inputRowBytes + 3*x];
-				
 				outputPix[y2*outputRowBytes + 3*x2 + 1] = inputPix[y*inputRowBytes + 3*x + 1];
-
 				outputPix[y2*outputRowBytes + 3*x2 + 2] = inputPix[y*inputRowBytes + 3*x + 2];
 			}
 		}
@@ -826,59 +969,75 @@ int main(void)
 	
 	NSImage *inputImage = [[NSImage alloc] initWithContentsOfURL:openPanel.URL];
 	
-		//1. ファイルをimageRepデータに変換
+	//1. ファイルをimageRepデータに変換
 	NSBitmapImageRep *imageRep = convertToImageRep(inputImage);
 	const int width = (int)imageRep.pixelsWide;
 	const int height = (int)imageRep.pixelsHigh;
 	
-		//2. 平滑化
+	//2. 平滑化
 	imageRep = normalize(imageRep, width, height);
-
-		//3. 2値化
-//	imageRep = monochrome(imageRep, width, height);
-//	output = [imageRep representationUsingType:NSBMPFileType properties:nil];
-//	save(output, [openPanel.URL.path stringByAppendingString:@"_out1.bmp"]);
 	
-		//4. 境界線検出
+	//3. 境界線検出
 	imageRep = findLine(imageRep, width, height);
-//	output = [imageRep representationUsingType:NSBMPFileType properties:nil];
-//	save(output, [openPanel.URL.path stringByAppendingString:@"_out2.bmp"]);
+	output = [imageRep representationUsingType:NSBMPFileType properties:nil];
+	save(output, [openPanel.URL.path stringByAppendingString:@"_out3.bmp"]);
 	
-		//5. 細線化
+	//4. 細線化
 	imageRep = thiness(imageRep, width, height);
-//	output = [imageRep representationUsingType:NSBMPFileType properties:nil];
-//	save(output, [openPanel.URL.path stringByAppendingString:@"_out3.bmp"]);
+	output = [imageRep representationUsingType:NSBMPFileType properties:nil];
+	save(output, [openPanel.URL.path stringByAppendingString:@"_out4.bmp"]);
 	
-		//6. ノイズキャンセル
+	//5. ノイズキャンセル
 	imageRep = noizeCancel(imageRep, width, height);
-//	output = [imageRep representationUsingType:NSBMPFileType properties:nil];
-//	save(output, [openPanel.URL.path stringByAppendingString:@"_out4.bmp"]);
-
-		//7. 輪郭検出
-	Line *edges = findEdge(imageRep, width, height);
-	edges = selectEdge(edges, imageRep, width, height);
-	imageRep = drawEdge(edges, imageRep, width, height);
-//	output = [imageRep representationUsingType:NSBMPFileType properties:nil];
-//	save(output, [openPanel.URL.path stringByAppendingString:@"_out5.bmp"]);
+	output = [imageRep representationUsingType:NSBMPFileType properties:nil];
+	save(output, [openPanel.URL.path stringByAppendingString:@"_out5.bmp"]);
 	
-		//8. 頂点検出
-	Square square = findSquare(edges, width, height);
-	if (!square.p1.x == -1) {
-		printf("rectangle recognision is failed.");
-		exit(EXIT_FAILURE);
-	}
-	
-		//9. 変形
-	imageRep = clipping(square, convertToImageRep(inputImage), width, height);
+	//6. 輪郭検出
+	Line *lines = findEdge(imageRep, width, height);
+	imageRep = drawLine(lines, imageRep, width, height);
 	output = [imageRep representationUsingType:NSBMPFileType properties:nil];
 	save(output, [openPanel.URL.path stringByAppendingString:@"_out6.bmp"]);
 
-		//10. フィルタかけまくる
-	imageRep = normalize(imageRep, width, height);
-//	imageRep = monochrome(imageRep, OUTPUT_WIDTH, OUTPUT_HEIGHT);
-	imageRep = thiness(imageRep, width, height);
+	int countWeight = 3;
+	Line *edges;
+	Square square;
+	while (true)
+	{
+		if (countWeight == 0)
+		{
+			exit(EXIT_FAILURE);
+		}
+		
+		//7. 領域選択
+		edges = selectEdge(lines, imageRep, width, height, countWeight);
+		imageRep = drawEdge(edges, imageRep, width, height);
+		output = [imageRep representationUsingType:NSBMPFileType properties:nil];
+		save(output, [openPanel.URL.path stringByAppendingString:@"_out7.bmp"]);
+		
+		//8. 頂点検出
+		square = findSquare(edges, width, height);
+		
+		if (square.p1.x != -1)
+		{
+			break;
+		}
+		countWeight--;
+	}
+	imageRep = drawSquare(square, imageRep, width, height);
 	output = [imageRep representationUsingType:NSBMPFileType properties:nil];
-	save(output, [openPanel.URL.path stringByAppendingString:@"_out7.bmp"]);
+	save(output, [openPanel.URL.path stringByAppendingString:@"_out8.bmp"]);
+	
+	//9. 変形
+	imageRep = clipping(square, convertToImageRep(inputImage), width, height);
+	output = [imageRep representationUsingType:NSBMPFileType properties:nil];
+	save(output, [openPanel.URL.path stringByAppendingString:@"_out9.bmp"]);
+	
+	//10. フィルタかけまくる
+	imageRep = monochrome(imageRep, OUTPUT_WIDTH, OUTPUT_HEIGHT);
+	imageRep = normalize(imageRep, OUTPUT_WIDTH, OUTPUT_HEIGHT);
+	//	imageRep = thiness(imageRep, OUTPUT_WIDTH, OUTPUT_HEIGHT);
+	output = [imageRep representationUsingType:NSBMPFileType properties:nil];
+	save(output, [openPanel.URL.path stringByAppendingString:@"_out10.bmp"]);
 	
 	return 0;
 }

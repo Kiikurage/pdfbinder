@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>IDESourceControlProjectFavoriteDictionaryKey</key>
+	<false/>
+	<key>IDESourceControlProjectIdentifier</key>
+	<string>5093BCDC-BCAD-4AAB-94B6-144A2808EDF1</string>
+	<key>IDESourceControlProjectName</key>
+	<string>pdfbinder</string>
+	<key>IDESourceControlProjectOriginsDictionary</key>
+	<dict>
+		<key>3C66791A8D3A37D0CC6C3C3ECC1F13DC7C8BCE87</key>
+		<string>https://github.com/kikura-yuichiro/pdfbinder.git</string>
+	</dict>
+	<key>IDESourceControlProjectPath</key>
+	<string>pdfbinder.xcodeproj</string>
+	<key>IDESourceControlProjectRelativeInstallPathDictionary</key>
+	<dict>
+		<key>3C66791A8D3A37D0CC6C3C3ECC1F13DC7C8BCE87</key>
+		<string>../..</string>
+	</dict>
+	<key>IDESourceControlProjectURL</key>
+	<string>https://github.com/kikura-yuichiro/pdfbinder.git</string>
+	<key>IDESourceControlProjectVersion</key>
+	<integer>111</integer>
+	<key>IDESourceControlProjectWCCIdentifier</key>
+	<string>3C66791A8D3A37D0CC6C3C3ECC1F13DC7C8BCE87</string>
+	<key>IDESourceControlProjectWCConfigurations</key>
+	<array>
+		<dict>
+			<key>IDESourceControlRepositoryExtensionIdentifierKey</key>
+			<string>public.vcs.git</string>
+			<key>IDESourceControlWCCIdentifierKey</key>
+			<string>3C66791A8D3A37D0CC6C3C3ECC1F13DC7C8BCE87</string>
+			<key>IDESourceControlWCCName</key>
+			<string>pdfbinder</string>
+		</dict>
+	</array>
+</dict>
+</plist>
