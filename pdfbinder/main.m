@@ -91,7 +91,7 @@ void deleteImage(Image image)
 	free(image.data);
 }
 
-Image convertToColorImage(NSImage *nsimage)
+Image convertToImage(NSImage *nsimage)
 {
 	NSData *tiffData = [nsimage TIFFRepresentation];
 	NSBitmapImageRep *imageRep = [NSBitmapImageRep imageRepWithData:tiffData];
@@ -99,7 +99,8 @@ Image convertToColorImage(NSImage *nsimage)
 	Image image;
 	image.width = (unsigned int)imageRep.pixelsWide;
 	image.height = (unsigned int)imageRep.pixelsHigh;
-	image.data = imageRep.bitmapData;
+	image.data = malloc(sizeof(unsigned char) * image.width*image.height*3);
+	memcpy(image.data, imageRep.bitmapData, image.width*image.height*3);
 
 	return image;
 }
@@ -896,12 +897,13 @@ int main(void)
 	NSImage *inputImage = [[NSImage alloc] initWithContentsOfURL:openPanel.URL];
 	
 	//1. ファイルをimageRepデータに変換
-	Image image1 = convertToColorImage(inputImage);
+	Image image1 = convertToImage(inputImage);
 	saveImage(image1, [openPanel.URL.path stringByAppendingString:@"_out1.jpg"]);
 	
 	//2. 平滑化
 	Image image2 = monochrome(image1);
 	saveImage(image2, [openPanel.URL.path stringByAppendingString:@"_out2.jpg"]);
+	deleteImage(image1);
 	
 	//3. 境界線検出
 	Image image3 = findLine(image2);
