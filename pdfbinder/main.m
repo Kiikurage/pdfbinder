@@ -40,13 +40,6 @@ typedef struct {
 	unsigned int height;
 } Image;
 
-typedef struct {
-	unsigned char *data;
-	unsigned int width;
-	unsigned int height;
-} ColorImage;
-
-#define pixel(I, X, Y) ((I).data[(Y)*(I).width + (X)])
 #define pixelR(I, X, Y) ((I).data[(Y)*(I).width*3 + 3*(X)])
 #define pixelG(I, X, Y) ((I).data[(Y)*(I).width*3 + 3*(X) + 1])
 #define pixelB(I, X, Y) ((I).data[(Y)*(I).width*3 + 3*(X) + 2])
@@ -66,49 +59,11 @@ void saveImage(Image image, NSString *path)
 																	 colorSpaceName:NSDeviceRGBColorSpace
 																		bytesPerRow:image.width*3
 																	   bitsPerPixel:24];
-	const NSInteger imageRowBytes = [imageRep bytesPerRow];
 	unsigned char *imagePix = [imageRep bitmapData];
 	
-	for (int y = 0; y < image.height; y++)
-	{
-		for (int x = 0; x < image.width; x++)
-		{
-			imagePix[y*imageRowBytes + 3*x] = pixel(image, x, y);
-			imagePix[y*imageRowBytes + 3*x + 1] = pixel(image, x, y);
-			imagePix[y*imageRowBytes + 3*x + 2] = pixel(image, x, y);
-		}
-	}
+	memcpy(imagePix, image.data, image.width*image.height*3);
 
-	NSData *data = [imageRep representationUsingType:NSBMPFileType properties:nil];
-	[data writeToFile:path atomically:NO];
-}
-
-void saveColorImage(ColorImage image, NSString *path)
-{
-	NSBitmapImageRep *imageRep = [[NSBitmapImageRep alloc] initWithBitmapDataPlanes:nil
-																		 pixelsWide:image.width
-																		 pixelsHigh:image.height
-																	  bitsPerSample:8
-																	samplesPerPixel:3
-																		   hasAlpha:NO
-																		   isPlanar:NO
-																	 colorSpaceName:NSDeviceRGBColorSpace
-																		bytesPerRow:image.width*3
-																	   bitsPerPixel:24];
-	const NSInteger imageRowBytes = [imageRep bytesPerRow];
-	unsigned char *imagePix = [imageRep bitmapData];
-	
-	for (int y = 0; y < image.height; y++)
-	{
-		for (int x = 0; x < image.width; x++)
-		{
-			imagePix[y*imageRowBytes + 3*x] = pixelR(image, x, y);
-			imagePix[y*imageRowBytes + 3*x + 1] = pixelG(image, x, y);
-			imagePix[y*imageRowBytes + 3*x + 2] = pixelB(image, x, y);
-		}
-	}
-	
-	NSData *data = [imageRep representationUsingType:NSBMPFileType properties:nil];
+	NSData *data = [imageRep representationUsingType:NSJPEGFileType properties:nil];
 	[data writeToFile:path atomically:NO];
 }
 
@@ -117,17 +72,16 @@ Image initImage(unsigned int width, unsigned int height)
 	Image image;
 	image.width = width;
 	image.height = height;
-	image.data = calloc(width * height, sizeof(unsigned char));
+	image.data = calloc(width * height * 3, sizeof(unsigned char));
 	
 	return image;
 }
 
-ColorImage initColorImage(unsigned int width, unsigned int height)
+Image copyImage(Image src)
 {
-	ColorImage image;
-	image.width = width;
-	image.height = height;
-	image.data = calloc(width * height * 3, sizeof(unsigned char));
+	Image image;
+	image.data = malloc(sizeof(unsigned char) * src.width * src.height*3);
+	memcpy(image.data, src.data, src.width*src.height*3);
 	
 	return image;
 }
@@ -137,17 +91,12 @@ void deleteImage(Image image)
 	free(image.data);
 }
 
-void deleteColorImage(ColorImage image)
-{
-	free(image.data);
-}
-
-ColorImage convertToColorImage(NSImage *nsimage)
+Image convertToColorImage(NSImage *nsimage)
 {
 	NSData *tiffData = [nsimage TIFFRepresentation];
 	NSBitmapImageRep *imageRep = [NSBitmapImageRep imageRepWithData:tiffData];
 
-	ColorImage image;
+	Image image;
 	image.width = (unsigned int)imageRep.pixelsWide;
 	image.height = (unsigned int)imageRep.pixelsHigh;
 	image.data = imageRep.bitmapData;
@@ -155,7 +104,7 @@ ColorImage convertToColorImage(NSImage *nsimage)
 	return image;
 }
 
-Image greyscale(ColorImage input)
+Image greyscale(Image input)
 {
 	Image output = initImage(input.width, input.height);
 
@@ -163,7 +112,10 @@ Image greyscale(ColorImage input)
 	{
 		for (int x = 1; x < output.width-1; x++)
 		{
-			pixel(output, x, y) = (pixelR(input, x, y)*2 + pixelG(input, x, y)*4 + pixelB(input, x, y)) / 7;
+			pixelR(output, x, y) =
+			pixelG(output, x, y) =
+			pixelB(output, x, y) =
+			(pixelR(input, x, y)*2 + pixelG(input, x, y)*4 + pixelB(input, x, y)) / 7;
 		}
 	}
 	
@@ -201,7 +153,7 @@ int detectThreshold(int arr[], const int ARR_SIZE)
 	return maxSigmaIndex;
 }
 
-Image monochrome(ColorImage input)
+Image monochrome(Image input)
 {
 	Image output = initImage(input.width, input.height);
 	
@@ -223,9 +175,13 @@ Image monochrome(ColorImage input)
 			if ((pixelR(input, x, y)*2
 				 + pixelG(input, x, y)*4
 				 + pixelB(input, x, y))/7 < threshold*4) {
-				pixel(output, x, y) = 0;
+				pixelR(output, x, y) = 0;
+				pixelG(output, x, y) = 0;
+				pixelB(output, x, y) = 0;
 			} else {
-				pixel(output, x, y) = 255;
+				pixelR(output, x, y) = 255;
+				pixelG(output, x, y) = 255;
+				pixelB(output, x, y) = 255;
 			}
 		}
 	}
@@ -233,9 +189,9 @@ Image monochrome(ColorImage input)
 	return output;
 }
 
-ColorImage normalize(ColorImage input)
+Image normalize(Image input)
 {
-	ColorImage output = initColorImage(input.width, input.height);
+	Image output = initImage(input.width, input.height);
 	unsigned int totalR = 0, totalG = 0, totalB = 0;
 	
 	unsigned char weight[9] = {
@@ -269,7 +225,7 @@ ColorImage normalize(ColorImage input)
 	return output;
 }
 
-Image findLine(ColorImage input)
+Image findLine(Image input)
 {
 	Image output = initImage(input.width, input.height);
 	
@@ -290,7 +246,9 @@ Image findLine(ColorImage input)
 				   + abs(b - prevB))/3;
 			
 			if (prevdif - dif > EPS) {
-				pixel(output, x, y) = 255;
+				pixelR(output, x, y) = 255;
+				pixelG(output, x, y) = 255;
+				pixelB(output, x, y) = 255;
 			}
 			
 			prevR = r;
@@ -313,7 +271,9 @@ Image findLine(ColorImage input)
 				   + abs(b - prevB))/3;
 			
 			if (prevdif - dif > EPS) {
-				pixel(output, x, y) = 255;
+				pixelR(output, x, y) = 255;
+				pixelG(output, x, y) = 255;
+				pixelB(output, x, y) = 255;
 			}
 			
 			prevR = r;
@@ -330,16 +290,14 @@ Image noizeCancel(Image input)
 {
 	const int R = 1;
 
-	Image output = initImage(input.width, input.height);
+	Image output = copyImage(input);
 	int cx, cy, count = 0;
 	
 	for (cx = R; cx < input.width - R; cx++)
 	{
 		for (cy = R; cy < input.height - R; cy++)
 		{
-			pixel(output, cx, cy) = pixel(input, cx, cy);
-			
-			if (pixel(input, cx, cy) == 0)
+			if (pixelR(input, cx, cy) == 0)
 			{
 				continue;
 			}
@@ -349,7 +307,7 @@ Image noizeCancel(Image input)
 			{
 				for (int y = cy-R; y <= cy+R; y++)
 				{
-					if (pixel(input, cx, cy) == 255)
+					if (pixelR(input, x, y) == 255)
 					{
 						count++;
 					}
@@ -358,7 +316,9 @@ Image noizeCancel(Image input)
 			
 			if (count < 2*R+1)
 			{
-				pixel(output, cx, cy) = 0;
+				pixelR(output, cx, cy) = 0;
+				pixelG(output, cx, cy) = 0;
+				pixelB(output, cx, cy) = 0;
 			}
 		}
 	};
@@ -378,11 +338,13 @@ Image thiness(Image input)
 	{
 		for (int x = 1; x < input.width; x++)
 		{
-			pix = pixel(input, x, y);
+			pix = pixelR(input, x, y);
 			dif = pix - prev;
 
 			if (dif > EPS) {
-				pixel(output, x, y) = 255;
+				pixelR(output, x, y) = 255;
+				pixelG(output, x, y) = 255;
+				pixelB(output, x, y) = 255;
 			}
 			
 			prev = pix;
@@ -393,11 +355,13 @@ Image thiness(Image input)
 	{
 		for (int y = 1; y < input.height; y++)
 		{
-			pix = pixel(input, x, y);
+			pix = pixelR(input, x, y);
 			dif = pix - prev;
 			
 			if (dif > EPS) {
-				pixel(output, x, y) = 255;
+				pixelR(output, x, y) = 255;
+				pixelG(output, x, y) = 255;
+				pixelB(output, x, y) = 255;
 			}
 			
 			prev = pix;
@@ -432,7 +396,7 @@ Line* findEdge(Image input)
 	{
 		for (int x = 0; x < input.width; x++)
 		{
-			if (pixel(input, x, y) != 255)
+			if (pixelR(input, x, y) != 255)
 			{
 				continue;
 			}
@@ -535,9 +499,9 @@ Line* findEdge(Image input)
 	return lines;
 }
 
-ColorImage drawLine(Line *lines, Image input)
+Image drawLine(Line *lines, Image input)
 {
-	ColorImage output = initColorImage(input.width, input.height);
+	Image output = copyImage(input);
 	
 	const double THETA_UNIT = M_PI / THETA_MAX;
 	
@@ -549,17 +513,6 @@ ColorImage drawLine(Line *lines, Image input)
 	{
 		sn[t] = sin(THETA_UNIT * t);
 		cs[t] = cos(THETA_UNIT * t);
-	}
-	
-	//走査
-	for (int y = 0; y < input.height; y++)
-	{
-		for (int x = 0; x < input.width; x++)
-		{
-			pixelR(output, x, y) = pixel(input, x, y);
-			pixelG(output, x, y) = pixel(input, x, y);
-			pixelB(output, x, y) = pixel(input, x, y);
-		}
 	}
 	
 	Line line;
@@ -631,7 +584,7 @@ Line *selectEdge(Line *lines, Image input, int countWeight)
 		
 		for (int x = 0; x < input.width; x++) {
 			for (int y = 0; y < input.height; y++) {
-				if (pixel(input, x, y) != 255)
+				if (pixelR(input, x, y) != 255)
 				{
 					continue;
 				}
@@ -683,9 +636,9 @@ Line *selectEdge(Line *lines, Image input, int countWeight)
 	return edges;
 }
 
-ColorImage drawEdge(Line *lines, Image input)
+Image drawEdge(Line *lines, Image input)
 {
-	ColorImage output = initColorImage(input.width, input.height);
+	Image output = copyImage(input);
 	
 	const double THETA_UNIT = M_PI / THETA_MAX;
 	
@@ -697,17 +650,6 @@ ColorImage drawEdge(Line *lines, Image input)
 	{
 		sn[t] = sin(THETA_UNIT * t);
 		cs[t] = cos(THETA_UNIT * t);
-	}
-	
-	//走査
-	for (int y = 0; y < input.height; y++)
-	{
-		for (int x = 0; x < input.width; x++)
-		{
-			pixelR(output, x, y) = pixel(input, x, y);
-			pixelG(output, x, y) = pixel(input, x, y);
-			pixelB(output, x, y) = pixel(input, x, y);
-		}
 	}
 	
 	Line edge;
@@ -859,25 +801,14 @@ Square findSquare(Line *edges, Image input)
 	return square;
 }
 
-ColorImage drawSquare(Square square, Image input)
+Image drawSquare(Square square, Image input)
 {
-	ColorImage output = initColorImage(input.width, input.height);
+	Image output = copyImage(input);
 	
 	Pos p1 = square.p1;
 	Pos p2 = square.p2;
 	Pos p3 = square.p3;
 	Pos p4 = square.p4;
-	
-	//走査
-	for (int y = 0; y < input.height; y++)
-	{
-		for (int x = 0; x < input.width; x++)
-		{
-			pixelR(output, x, y) = pixel(input, x, y);
-			pixelG(output, x, y) = pixel(input, x, y);
-			pixelB(output, x, y) = pixel(input, x, y);
-		}
-	}
 	
 	for (int dx = -10; dx <= 10; dx++)
 	{
@@ -913,12 +844,12 @@ ColorImage drawSquare(Square square, Image input)
 	return output;
 }
 
-ColorImage clipping(Square square, ColorImage input)
+Image clipping(Square square, Image input)
 {
 	OUTPUT_WIDTH = sqrt(pow(square.p1.x-square.p2.x, 2) + pow(square.p1.y-square.p2.y, 2));
 	OUTPUT_HEIGHT = sqrt(pow(square.p1.x-square.p4.x, 2) + pow(square.p1.y-square.p4.y, 2));
 	
-	ColorImage output = initColorImage(OUTPUT_WIDTH, OUTPUT_HEIGHT);
+	Image output = initImage(OUTPUT_WIDTH, OUTPUT_HEIGHT);
 
 	const double sn = 1.0 * (square.p2.y-square.p1.y) / OUTPUT_WIDTH;
 	const double cs = 1.0 * (square.p2.x-square.p1.x) / OUTPUT_WIDTH;
@@ -956,7 +887,7 @@ int main(void)
 	NSOpenPanel *openPanel = [NSOpenPanel openPanel];
 	openPanel.allowedFileTypes = @[@"png", @"jpg", @"jpeg"];
 	
-	if ([openPanel runModal] != NSOKButton)
+	if ([openPanel runModal] != NSModalResponseOK)
 	{
 		NSLog(@"Canceled.");
 		exit(0);
@@ -965,38 +896,33 @@ int main(void)
 	NSImage *inputImage = [[NSImage alloc] initWithContentsOfURL:openPanel.URL];
 	
 	//1. ファイルをimageRepデータに変換
-	ColorImage image1 = convertToColorImage(inputImage);
-	saveColorImage(image1, [openPanel.URL.path stringByAppendingString:@"_out1.bmp"]);
+	Image image1 = convertToColorImage(inputImage);
+	saveImage(image1, [openPanel.URL.path stringByAppendingString:@"_out1.jpg"]);
 	
 	//2. 平滑化
-	ColorImage image2 = normalize(image1);
-	saveColorImage(image2, [openPanel.URL.path stringByAppendingString:@"_out2.bmp"]);
+	Image image2 = monochrome(image1);
+	saveImage(image2, [openPanel.URL.path stringByAppendingString:@"_out2.jpg"]);
 	
 	//3. 境界線検出
 	Image image3 = findLine(image2);
-	deleteColorImage(image2);
-	saveImage(image3, [openPanel.URL.path stringByAppendingString:@"_out3.bmp"]);
+	deleteImage(image2);
+	saveImage(image3, [openPanel.URL.path stringByAppendingString:@"_out3.jpg"]);
 	
-	//4. 細線化
-	Image image4 = thiness(image3);
+	//4. ノイズキャンセル
+	Image image4 = noizeCancel(image3);
 	deleteImage(image3);
-	saveImage(image4, [openPanel.URL.path stringByAppendingString:@"_out4.bmp"]);
+	saveImage(image4, [openPanel.URL.path stringByAppendingString:@"_out4.jpg"]);
 	
-	//5. ノイズキャンセル
-	Image image5 = noizeCancel(image4);
-	deleteImage(image4);
-	saveImage(image5, [openPanel.URL.path stringByAppendingString:@"_out5.bmp"]);
-	
-	//6. 輪郭検出
-	Line *lines = findEdge(image5);
-	ColorImage image6 = drawLine(lines, image5);
-	saveColorImage(image6, [openPanel.URL.path stringByAppendingString:@"_out6.bmp"]);
-	deleteColorImage(image6);
+	//5. 輪郭検出
+	Line *lines = findEdge(image4);
+	Image image5 = drawLine(lines, image4);
+	saveImage(image5, [openPanel.URL.path stringByAppendingString:@"_out5.jpg"]);
+	deleteImage(image5);
 	
 	int countWeight = 3;
 	Line *edges;
 	Square square;
-	ColorImage image7;
+	Image image6;
 	while (true)
 	{
 		if (countWeight == 0)
@@ -1004,31 +930,31 @@ int main(void)
 			exit(EXIT_FAILURE);
 		}
 		
-		//7. 領域選択
-		edges = selectEdge(lines, image5, countWeight);
-		image7 = drawEdge(edges, image5);
-		saveColorImage(image7, [openPanel.URL.path stringByAppendingString:@"_out7.bmp"]);
-		deleteColorImage(image7);
+		//6. 領域選択
+		edges = selectEdge(lines, image4, countWeight);
+		image6 = drawEdge(edges, image4);
+		saveImage(image6, [openPanel.URL.path stringByAppendingString:@"_out6.jpg"]);
+		deleteImage(image6);
 		
-		//8. 頂点検出
-		square = findSquare(edges, image5);
+		//7. 頂点検出
+		square = findSquare(edges, image4);
 		
 		if (square.p1.x != -1) break;
 		countWeight--;
 	}
-	ColorImage image8 = drawSquare(square, image5);
-	saveColorImage(image7, [openPanel.URL.path stringByAppendingString:@"_out8.bmp"]);
-	deleteImage(image5);
-	deleteColorImage(image8);
+	Image image7 = drawSquare(square, image4);
+	saveImage(image7, [openPanel.URL.path stringByAppendingString:@"_out7.jpg"]);
+	deleteImage(image4);
+	deleteImage(image7);
 	
 	//9. 変形
-	ColorImage image9 = clipping(square, image1);
-	saveColorImage(image9, [openPanel.URL.path stringByAppendingString:@"_out9.bmp"]);
-//	
+	Image image8 = clipping(square, image1);
+	saveImage(image8, [openPanel.URL.path stringByAppendingString:@"_out8.jpg"]);
+
 	//10. フィルタかけまくる
 //	Image image10 = monochrome(image9);
 //	ColorImage image11 = normalize(image10);
-//	saveColorImage(image11, [openPanel.URL.path stringByAppendingString:@"_out10.bmp"]);
+//	saveColorImage(image11, [openPanel.URL.path stringByAppendingString:@"_out10.jpg"]);
 //	deleteImage(image10);
 //	deleteColorImage(image11);
 	
