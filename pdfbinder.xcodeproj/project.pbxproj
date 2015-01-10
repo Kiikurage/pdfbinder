@@ -7,7 +7,10 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
-		C33F6E401A06B5E400C49E9E /* main.m in Sources */ = {isa = PBXBuildFile; fileRef = C33F6E3F1A06B5E400C49E9E /* main.m */; };
+		992DA11C1A0D1A0900FC8E00 /* filter.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 992DA11A1A0D1A0900FC8E00 /* filter.cpp */; };
+		992DA11F1A0D1A2A00FC8E00 /* Image.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 992DA11D1A0D1A2A00FC8E00 /* Image.cpp */; };
+		992E8F501A0D443B008F6A8C /* Cocoa.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 992E8F4F1A0D443B008F6A8C /* Cocoa.framework */; };
+		C33F6E401A06B5E400C49E9E /* main.mm in Sources */ = {isa = PBXBuildFile; fileRef = C33F6E3F1A06B5E400C49E9E /* main.mm */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXCopyFilesBuildPhase section */
@@ -23,8 +26,13 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
+		992DA11A1A0D1A0900FC8E00 /* filter.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = filter.cpp; sourceTree = "<group>"; };
+		992DA11B1A0D1A0900FC8E00 /* filter.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = filter.h; sourceTree = "<group>"; };
+		992DA11D1A0D1A2A00FC8E00 /* Image.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = Image.cpp; sourceTree = "<group>"; };
+		992DA11E1A0D1A2A00FC8E00 /* Image.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = Image.h; sourceTree = "<group>"; };
+		992E8F4F1A0D443B008F6A8C /* Cocoa.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Cocoa.framework; path = System/Library/Frameworks/Cocoa.framework; sourceTree = SDKROOT; };
 		C33F6E3C1A06B5E400C49E9E /* pdfbinder */ = {isa = PBXFileReference; explicitFileType = "compiled.mach-o.executable"; includeInIndex = 0; path = pdfbinder; sourceTree = BUILT_PRODUCTS_DIR; };
-		C33F6E3F1A06B5E400C49E9E /* main.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = main.m; sourceTree = "<group>"; wrapsLines = 0; };
+		C33F6E3F1A06B5E400C49E9E /* main.mm */ = {isa = PBXFileReference; explicitFileType = sourcecode.cpp.objcpp; path = main.mm; sourceTree = "<group>"; wrapsLines = 0; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -32,6 +40,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				992E8F501A0D443B008F6A8C /* Cocoa.framework in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -41,6 +50,7 @@
 		C33F6E331A06B5E400C49E9E = {
 			isa = PBXGroup;
 			children = (
+				992E8F4F1A0D443B008F6A8C /* Cocoa.framework */,
 				C33F6E3E1A06B5E400C49E9E /* pdfbinder */,
 				C33F6E3D1A06B5E400C49E9E /* Products */,
 			);
@@ -57,7 +67,11 @@
 		C33F6E3E1A06B5E400C49E9E /* pdfbinder */ = {
 			isa = PBXGroup;
 			children = (
-				C33F6E3F1A06B5E400C49E9E /* main.m */,
+				C33F6E3F1A06B5E400C49E9E /* main.mm */,
+				992DA11D1A0D1A2A00FC8E00 /* Image.cpp */,
+				992DA11E1A0D1A2A00FC8E00 /* Image.h */,
+				992DA11A1A0D1A0900FC8E00 /* filter.cpp */,
+				992DA11B1A0D1A0900FC8E00 /* filter.h */,
 			);
 			path = pdfbinder;
 			sourceTree = "<group>";
@@ -118,7 +132,9 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				C33F6E401A06B5E400C49E9E /* main.m in Sources */,
+				992DA11F1A0D1A2A00FC8E00 /* Image.cpp in Sources */,
+				C33F6E401A06B5E400C49E9E /* main.mm in Sources */,
+				992DA11C1A0D1A0900FC8E00 /* filter.cpp in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -232,6 +248,7 @@
 				C33F6E451A06B5E400C49E9E /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
 		};
 /* End XCConfigurationList section */
 	};
